@@ -77,4 +77,8 @@ app.get('/developers', async (req, res) => {
   }
 });
 
+app.get('/most_used', (req, res) => {
+  res.status(200).json({message: 'most used language'})
+})
+
 app.listen(3000, () => console.log('Server running on port 3000'));
