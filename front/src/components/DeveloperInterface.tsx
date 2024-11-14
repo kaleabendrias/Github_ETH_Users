@@ -3,7 +3,7 @@ import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Search, ExternalLink, ChevronLeft, ChevronRight } from "lucide-react";
+import { Search, ExternalLink } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   Pagination,
@@ -80,7 +80,7 @@ const DevelopersInterface: React.FC = () => {
   useEffect(() => {
     const fetchDevelopers = async () => {
       try {
-        const response = await fetch("http://localhost:3000/developers");
+        const response = await fetch("https://github-eth-users.vercel.app/developers");
         if (!response.ok) {
           const errorData: ApiError = await response.json();
           throw new Error(errorData.message || "Failed to fetch developers");
