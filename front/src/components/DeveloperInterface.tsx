@@ -80,7 +80,7 @@ const DevelopersInterface: React.FC = () => {
   useEffect(() => {
     const fetchDevelopers = async () => {
       try {
-        const response = await fetch("https://github-eth-users.vercel.app/developers");
+        const response = await fetch("https://github-eth-users.onrender.com/developers");
         if (!response.ok) {
           const errorData: ApiError = await response.json();
           throw new Error(errorData.message || "Failed to fetch developers");
