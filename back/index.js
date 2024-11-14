@@ -15,7 +15,6 @@ app.get('/developers', async (req, res) => {
     const cached = cache.get('developers');
     if (cached) return res.json(cached);
 
-    // Fetch total count first
     const initialResponse = await axios.get('https://api.github.com/search/users', {
       params: {
         q: 'location:ethiopia',
