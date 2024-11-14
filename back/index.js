@@ -76,6 +76,7 @@ app.get('/developers', async (req, res) => {
     res.json(allDevelopers);
 
   } catch (error) {
+    console.error('whole error: ', error)
     console.error('Error:', error.message);
     res.status(500).json({ 
       error: 'Failed to fetch developers',
