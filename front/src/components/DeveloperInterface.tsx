@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Search, ExternalLink } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
 import {
   Pagination,
   PaginationContent,
@@ -22,6 +23,7 @@ interface Developer {
   profile: string;
   repos_url: string;
   followers: number;
+  languages: string[];
 }
 
 interface ApiError {
@@ -55,6 +57,15 @@ const DeveloperCard: React.FC<DeveloperCardProps> = ({
       <p className="text-sm text-muted-foreground">
         {developer.followers} followers
       </p>
+      {developer.languages?.length > 0 && (
+        <div className="flex flex-wrap gap-1 mt-2">
+          {developer.languages.map((language) => (
+            <Badge key={language} variant="secondary">
+              {language}
+            </Badge>
+          ))}
+        </div>
+      )}
       <Button
         variant="link"
         className="h-6 p-0"
@@ -76,6 +87,7 @@ const DevelopersInterface: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [selectedUsername, setSelectedUsername] = useState<string | null>(null);
+  const [selectedLanguages, setSelectedLanguages] = useState<string[]>([]);
 
   useEffect(() => {
     const fetchDevelopers = async () => {
@@ -86,7 +98,13 @@ const DevelopersInterface: React.FC = () => {
           throw new Error(errorData.message || "Failed to fetch developers");
         }
         const data: Developer[] = await response.json();
-        setDevelopers(data);
+        console.log("Fetched developers:", data);
+        setDevelopers(
+          data.map((developer) => ({
+            ...developer,
+            languages: developer.languages || [],
+          }))
+        );
         setError(null);
       } catch (error) {
         const message =
@@ -100,15 +118,31 @@ const DevelopersInterface: React.FC = () => {
     fetchDevelopers();
   }, []);
 
+  const availableLanguages = React.useMemo(() => {
+    const languageSet = new Set<string>();
+    developers.forEach((dev) => {
+      (dev.languages || []).forEach((language) => languageSet.add(language));
+    });
+    return Array.from(languageSet).sort((a, b) => a.localeCompare(b));
+  }, [developers]);
+
   const filteredDevelopers = React.useMemo(
     () =>
-      developers.filter((dev) =>
-        dev.username.toLowerCase().includes(search.toLowerCase())
-      ),
-    [developers, search]
+      developers.filter((dev) => {
+        const matchesSearch = dev.username
+          .toLowerCase()
+          .includes(search.toLowerCase());
+        const matchesLanguage =
+          selectedLanguages.length === 0 ||
+          selectedLanguages.every((language) =>
+            (dev.languages || []).includes(language)
+          );
+        return matchesSearch && matchesLanguage;
+      }),
+    [developers, search, selectedLanguages]
   );
 
-  const totalPages = Math.ceil(filteredDevelopers.length / ITEMS_PER_PAGE);
+  const totalPages = Math.max(1, Math.ceil(filteredDevelopers.length / ITEMS_PER_PAGE));
 
   const paginatedDevelopers = React.useMemo(() => {
     const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
@@ -124,13 +158,28 @@ const DevelopersInterface: React.FC = () => {
     window.scrollTo(0, 0);
   };
 
+  const handleLanguageToggle = (language: string) => {
+    setSelectedLanguages((previous) => {
+      if (previous.includes(language)) {
+        return previous.filter((item) => item !== language);
+      }
+      return [...previous, language];
+    });
+    setCurrentPage(1);
+  };
+
+  const handleClearLanguages = () => {
+    setSelectedLanguages([]);
+    setCurrentPage(1);
+  };
+
   const renderPaginationItems = () => {
     const items = [];
     const maxVisible = 5;
     const halfVisible = Math.floor(maxVisible / 2);
 
     let startPage = Math.max(1, currentPage - halfVisible);
-    let endPage = Math.min(totalPages, startPage + maxVisible - 1);
+    const endPage = Math.min(totalPages, startPage + maxVisible - 1);
 
     if (endPage - startPage + 1 < maxVisible) {
       startPage = Math.max(1, endPage - maxVisible + 1);
@@ -205,6 +254,29 @@ const DevelopersInterface: React.FC = () => {
               />
             </div>
           </div>
+          {availableLanguages.length > 0 && (
+            <div className="flex flex-wrap items-center gap-2 mt-4">
+              <span className="text-sm text-muted-foreground">Filter by language:</span>
+              {availableLanguages.map((language) => {
+                const isActive = selectedLanguages.includes(language);
+                return (
+                  <Button
+                    key={language}
+                    size="sm"
+                    variant={isActive ? "default" : "outline"}
+                    onClick={() => handleLanguageToggle(language)}
+                  >
+                    {language}
+                  </Button>
+                );
+              })}
+              {selectedLanguages.length > 0 && (
+                <Button size="sm" variant="ghost" onClick={handleClearLanguages}>
+                  Clear
+                </Button>
+              )}
+            </div>
+          )}
         </CardHeader>
         <CardContent>
           {error && (

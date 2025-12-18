@@ -17,6 +17,19 @@ app.use((req, res, next) => {
 const cache = new NodeCache({ stdTTL: 3600 });
 
 const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
+const MAX_DEVELOPERS = 100;
+const REPO_SAMPLE_LIMIT = 50;
+const LANGUAGE_LIMIT = 5;
+const REQUEST_DELAY_MS = 150;
+
+const githubHeaders = {
+  Accept: 'application/vnd.github.v3+json',
+  ...(GITHUB_TOKEN ? { Authorization: `token ${GITHUB_TOKEN}` } : {})
+};
+
+if (!GITHUB_TOKEN) {
+  console.warn('Warning: GITHUB_TOKEN is not set. GitHub rate limits will be very low.');
+}
 
 app.get('/developers', async (req, res) => {
   try {
@@ -30,13 +43,10 @@ app.get('/developers', async (req, res) => {
         order: 'desc',
         per_page: 1
       },
-      headers: {
-        'Authorization': `token ${GITHUB_TOKEN}`,
-        'Accept': 'application/vnd.github.v3+json'
-      }
+      headers: githubHeaders
     });
 
-    const totalCount = Math.min(initialResponse.data.total_count, 1000);
+    const totalCount = Math.min(initialResponse.data.total_count, MAX_DEVELOPERS);
     const perPage = 100;
     const pages = Math.ceil(totalCount / perPage);
     let allDevelopers = [];
@@ -50,10 +60,7 @@ app.get('/developers', async (req, res) => {
           per_page: perPage,
           page: page
         },
-        headers: {
-          'Authorization': `token ${GITHUB_TOKEN}`,
-          'Accept': 'application/vnd.github.v3+json'
-        }
+        headers: githubHeaders
       });
 
 
@@ -67,13 +74,70 @@ app.get('/developers', async (req, res) => {
 
       allDevelopers = [...allDevelopers, ...developers];
 
+      if (allDevelopers.length >= MAX_DEVELOPERS) {
+        allDevelopers = allDevelopers.slice(0, MAX_DEVELOPERS);
+        break;
+      }
+
       if (page < pages) {
         await new Promise(resolve => setTimeout(resolve, 1000));
       }
     }
 
-    cache.set('developers', allDevelopers);
-    res.json(allDevelopers);
+    const enrichedDevelopers = [];
+
+    for (const developer of allDevelopers) {
+      try {
+        const [userRes, reposRes] = await Promise.all([
+          axios.get(`https://api.github.com/users/${developer.username}`, {
+            headers: githubHeaders
+          }),
+          axios.get(`https://api.github.com/users/${developer.username}/repos`, {
+            params: {
+              per_page: REPO_SAMPLE_LIMIT,
+              sort: 'pushed',
+              direction: 'desc'
+            },
+            headers: githubHeaders
+          })
+        ]);
+
+        const repos = reposRes.data.filter(repo => !repo.fork).slice(0, REPO_SAMPLE_LIMIT);
+        const languageCounts = repos.reduce((acc, repo) => {
+          if (repo.language) {
+            acc[repo.language] = (acc[repo.language] || 0) + 1;
+          }
+          return acc;
+        }, {});
+
+        const languages = Object.entries(languageCounts)
+          .sort((a, b) => b[1] - a[1])
+          .map(([name]) => name)
+          .slice(0, LANGUAGE_LIMIT);
+
+        enrichedDevelopers.push({
+          username: developer.username,
+          avatar: userRes.data.avatar_url,
+          profile: userRes.data.html_url,
+          repos_url: developer.repos_url,
+          followers: userRes.data.followers,
+          languages
+        });
+      } catch (detailError) {
+        console.error(`Failed to enrich ${developer.username}:`, detailError.message);
+        enrichedDevelopers.push({
+          ...developer,
+          languages: []
+        });
+      }
+
+      if (REQUEST_DELAY_MS) {
+        await new Promise(resolve => setTimeout(resolve, REQUEST_DELAY_MS));
+      }
+    }
+
+    cache.set('developers', enrichedDevelopers);
+    res.json(enrichedDevelopers);
 
   } catch (error) {
     console.error('whole error: ', error)
